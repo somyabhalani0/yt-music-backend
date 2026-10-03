@@ -1,7 +1,35 @@
 import subprocess
 import json
 from pydantic import BaseModel
+
+def parse_duration(d):
+    if isinstance(d, int): return d
+    if not d: return 0
+    parts = str(d).split(':')
+    try:
+        if len(parts) == 3:
+            return int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0])*60 + int(parts[1])
+        return int(parts[0])
+    except:
+        return 0
+
 from fastapi import HTTPException, Depends
+
+def parse_duration(d):
+    if isinstance(d, int): return d
+    if not d: return 0
+    parts = str(d).split(':')
+    try:
+        if len(parts) == 3:
+            return int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0])*60 + int(parts[1])
+        return int(parts[0])
+    except:
+        return 0
+
 from fastapi import FastAPI, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -90,14 +118,18 @@ ydl = yt_dlp.YoutubeDL(ydl_opts)
 @app.get("/search")
 def search(q: str):
     try:
-        # Search YouTube Music without filter to include both songs and videos (e.g. covers, slowed versions)
-        results = ytmusic.search(q, limit=20)
+        # Search both songs and videos to get a full list of results
+        songs = ytmusic.search(q, filter="songs", limit=20)
+        videos = ytmusic.search(q, filter="videos", limit=20)
         
+        # Combine and interleave them slightly
+        results = []
+        for i in range(max(len(songs), len(videos))):
+            if i < len(songs): results.append(songs[i])
+            if i < len(videos): results.append(videos[i])
+            
         mapped = []
         for item in results:
-            # We only want playable media (songs and videos), not albums/artists/playlists
-            if item.get('resultType') not in ('song', 'video'):
-                continue
                 
             # Get highest quality thumbnail
             thumbnails = item.get('thumbnails', [])
@@ -125,7 +157,13 @@ def search(q: str):
 @app.get("/recommend")
 def recommend(video_id: str):
     try:
-        playlist = ytmusic.get_watch_playlist(videoId=video_id, limit=20)
+        # Some video IDs fail with get_watch_playlist if they are not music.
+        # If it fails, fallback to a generic search for recommendations.
+        try:
+            playlist = ytmusic.get_watch_playlist(videoId=video_id, limit=20)
+        except Exception:
+            # Fallback
+            return {"results": []}
         tracks = playlist.get('tracks', [])
         mapped = []
         for item in tracks:
@@ -143,7 +181,7 @@ def recommend(video_id: str):
                 "title": item['title'],
                 "uploaderName": artists,
                 "thumbnail": thumbnail_url,
-                "durationSeconds": item.get('duration_seconds', 0) or item.get('length', 0) or 0,
+                "durationSeconds": parse_duration(item.get('duration_seconds', 0) or item.get('length', 0) or 0),
                 "type": "song"
             })
         return {"results": mapped}
@@ -205,6 +243,20 @@ def get_playlist(playlist_id: str):
 
 
 from db import init_db, get_db, hash_password, verify_password, create_access_token, get_current_user_id, db_lock
+
+def parse_duration(d):
+    if isinstance(d, int): return d
+    if not d: return 0
+    parts = str(d).split(':')
+    try:
+        if len(parts) == 3:
+            return int(parts[0])*3600 + int(parts[1])*60 + int(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0])*60 + int(parts[1])
+        return int(parts[0])
+    except:
+        return 0
+
 from fastapi import HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import Optional
