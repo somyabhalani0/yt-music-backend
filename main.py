@@ -146,7 +146,7 @@ def search(q: str):
                 "title": item['title'],
                 "uploaderName": artists,
                 "thumbnail": thumbnail_url,
-                "durationSeconds": item.get('duration_seconds', 0),
+                "durationSeconds": parse_duration(item.get('duration_seconds', 0) or item.get('duration', 0) or item.get('length', 0) or 0),
                 "type": item.get('resultType')
             })
             
